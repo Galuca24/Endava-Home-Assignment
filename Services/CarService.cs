@@ -1,5 +1,6 @@
 using CarInsurance.Api.Data;
 using CarInsurance.Api.Dtos;
+using CarInsurance.Api.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace CarInsurance.Api.Services;
@@ -27,4 +28,58 @@ public class CarService(AppDbContext db)
             p.EndDate >= date
         );
     }
+
+    //To register a claim
+    public async Task<ClaimDto?> RegisterClaimAsync(long carId, CreateClaimDto createClaimDto)
+    {
+        var car = await _db.Cars.FindAsync(carId);
+        if (car is null)
+        {
+            return null; 
+        }
+
+        var newClaim = new Claim
+        {
+            CarId = carId,
+            ClaimDate = createClaimDto.ClaimDate,
+            Description = createClaimDto.Description,
+            Amount = createClaimDto.Amount
+        };
+
+        _db.Claims.Add(newClaim);
+        await _db.SaveChangesAsync();
+
+        return new ClaimDto(newClaim.Id, newClaim.CarId, newClaim.ClaimDate, newClaim.Description, newClaim.Amount);
+    }
+
+    // Metod? pentru a ob?ine istoricul unei ma?ini
+    public async Task<List<HistoryItemDto>?> GetCarHistoryAsync(long carId)
+    {
+        var car = await _db.Cars
+            .Include(c => c.Policies)
+            .Include(c => c.Claims)
+            .FirstOrDefaultAsync(c => c.Id == carId);
+
+        if (car is null)
+        {
+            return null; 
+        }
+
+        var history = new List<HistoryItemDto>();
+
+        foreach (var policy in car.Policies)
+        {
+            history.Add(new HistoryItemDto(policy.StartDate, "Policy Start", $"Provider: {policy.Provider}, Valid until: {policy.EndDate:yyyy-MM-dd}"));
+            history.Add(new HistoryItemDto(policy.EndDate, "Policy End", $"Provider: {policy.Provider}"));
+        }
+
+        foreach (var claim in car.Claims)
+        {
+            history.Add(new HistoryItemDto(claim.ClaimDate, "Claim", $"Description: {claim.Description}, Amount: {claim.Amount:C}"));
+        }
+
+        return history.OrderBy(item => item.Date).ToList();
+    }
+
+
 }

@@ -30,4 +30,26 @@ public class CarsController(CarService service) : ControllerBase
             return NotFound();
         }
     }
+
+    [HttpPost("cars/{carId:long}/claims")]
+    public async Task<ActionResult<ClaimDto>> RegisterClaim(long carId, [FromBody] CreateClaimDto claimDto)
+    {
+        var createdClaim = await _service.RegisterClaimAsync(carId, claimDto);
+        if (createdClaim is null)
+        {
+            return NotFound($"Car with ID {carId} not found.");
+        }
+        return CreatedAtAction(nameof(RegisterClaim), new { carId = createdClaim.CarId, claimId = createdClaim.Id }, createdClaim);
+    }
+
+    [HttpGet("cars/{carId:long}/history")]
+    public async Task<ActionResult<List<HistoryItemDto>>> GetCarHistory(long carId)
+    {
+        var history = await _service.GetCarHistoryAsync(carId);
+        if (history is null)
+        {
+            return NotFound($"Car with ID {carId} not found.");
+        }
+        return Ok(history);
+    }
 }

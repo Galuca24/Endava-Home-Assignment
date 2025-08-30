@@ -12,4 +12,6 @@ public class Car
     public Owner Owner { get; set; } = default!;
 
     public ICollection<InsurancePolicy> Policies { get; set; } = new List<InsurancePolicy>();
+
+    public ICollection<Claim> Claims { get; set; } = new List<Claim>();
 }
