@@ -17,18 +17,20 @@ public class CarsController(CarService service) : ControllerBase
     [HttpGet("cars/{carId:long}/insurance-valid")]
     public async Task<ActionResult<InsuranceValidityResponse>> IsInsuranceValid(long carId, [FromQuery] string date)
     {
-        if (!DateOnly.TryParse(date, out var parsed))
+        if (!DateOnly.TryParse(date, out var parsedDate))
+        {
             return BadRequest("Invalid date format. Use YYYY-MM-DD.");
+        }
 
-        try
+        var result = await _service.CheckInsuranceValidityAsync(carId, parsedDate);
+
+        if (!result.CarFound)
         {
-            var valid = await _service.IsInsuranceValidAsync(carId, parsed);
-            return Ok(new InsuranceValidityResponse(carId, parsed.ToString("yyyy-MM-dd"), valid));
+            return NotFound($"Car with ID {carId} not found.");
         }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
+
+        var response = new InsuranceValidityResponse(carId, parsedDate.ToString("yyyy-MM-dd"), result.IsValid);
+        return Ok(response);
     }
 
     [HttpPost("cars/{carId:long}/claims")]
@@ -51,5 +53,50 @@ public class CarsController(CarService service) : ControllerBase
             return NotFound($"Car with ID {carId} not found.");
         }
         return Ok(history);
+    }
+
+    [HttpPost("cars")]
+    public async Task<ActionResult<CarDto>> CreateCar([FromBody] CreateCarDto carDto)
+    {
+        var result = await _service.CreateCarAsync(carDto);
+
+        if (result.VinConflict)
+        {
+            return Conflict($"A car with VIN '{carDto.Vin}' already exists.");
+        }
+
+        if (result.OwnerNotFound)
+        {
+            return BadRequest($"Owner with ID {carDto.OwnerId} not found.");
+        }
+
+        var createdCar = result.CreatedCar;
+        return CreatedAtAction(nameof(GetCars), new { id = createdCar.Id }, createdCar);
+    }
+
+
+    [HttpPost("cars/{carId:long}/policies")]
+    public async Task<ActionResult<InsurancePolicyDto>> CreatePolicy(long carId, [FromBody] CreatePolicyDto policyDto)
+    {
+        if (policyDto.StartDate >= policyDto.EndDate)
+        {
+            return BadRequest("Policy StartDate must be before EndDate.");
+        }
+
+        var result = await _service.CreatePolicyAsync(carId, policyDto);
+
+        if (result.CarNotFound)
+        {
+            return NotFound($"Car with ID {carId} not found.");
+        }
+
+        if (result.OverlapConflict)
+        {
+            return Conflict("The provided policy dates overlap with an existing policy for this car.");
+        }
+
+        var createdPolicy = result.CreatedPolicy;
+        var actionName = nameof(GetCars); 
+        return CreatedAtAction(actionName, new { id = createdPolicy.Id }, createdPolicy);
     }
 }
